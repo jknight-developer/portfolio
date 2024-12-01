@@ -73,7 +73,7 @@ pub fn view(model: Model) -> Element(Msg) {
 }
 
 fn index(_model: Model) -> Element(Msg) {
-  let flex_container = attribute.style([#("height", "100%"), #("padding", "0"), #("margin", "0"), #("display", "flex"), #("align-items", "center"), #("justify-content", "center")])
+  let flex_container = attribute.style([#("height", "100%"), #("padding", "0"), #("margin", "0"), #("display", "flex"), #("flex-direction", "column"), #("align-items", "center"), #("justify-content", "center")])
   let flex_item = attribute.style([#("padding", "2rem"), #("width", "100%"), #("margin", "4rem"), #("text-align", "center")])
   html.div([flex_container], [
     html.div([flex_item, classes.text_4xl(), classes.font_alt()], [html.p([], [element.text("Site under development")])]),

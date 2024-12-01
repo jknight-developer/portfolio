@@ -2701,6 +2701,7 @@ function index2(_) {
       ["padding", "0"],
       ["margin", "0"],
       ["display", "flex"],
+      ["flex-direction", "column"],
       ["align-items", "center"],
       ["justify-content", "center"]
     ])
