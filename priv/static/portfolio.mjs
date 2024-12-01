@@ -49,8 +49,8 @@ var List = class {
 function prepend(element2, tail) {
   return new NonEmpty(element2, tail);
 }
-function toList(elements2, tail) {
-  return List.fromArray(elements2, tail);
+function toList(elements3, tail) {
+  return List.fromArray(elements3, tail);
 }
 var ListIterator = class {
   #current;
@@ -168,6 +168,13 @@ function structurallyCompatibleObjects(a, b) {
     return false;
   return a.constructor === b.constructor;
 }
+function divideFloat(a, b) {
+  if (b === 0) {
+    return 0;
+  } else {
+    return a / b;
+  }
+}
 function makeError(variant, module, line, fn, message, extra) {
   let error = new globalThis.Error(message);
   error.gleam_error = variant;
@@ -182,6 +189,44 @@ function makeError(variant, module, line, fn, message, extra) {
 // build/dev/javascript/gleam_stdlib/gleam/option.mjs
 var None = class extends CustomType {
 };
+
+// build/dev/javascript/gleam_stdlib/gleam/float.mjs
+function negate(x) {
+  return -1 * x;
+}
+function round2(x) {
+  let $ = x >= 0;
+  if ($) {
+    return round(x);
+  } else {
+    return 0 - round(negate(x));
+  }
+}
+function divide(a, b) {
+  if (b === 0) {
+    return new Error(void 0);
+  } else {
+    let b$1 = b;
+    return new Ok(divideFloat(a, b$1));
+  }
+}
+function multiply(a, b) {
+  return a * b;
+}
+
+// build/dev/javascript/gleam_stdlib/gleam/result.mjs
+function try$(result, fun) {
+  if (result.isOk()) {
+    let x = result[0];
+    return fun(x);
+  } else {
+    let e = result[0];
+    return new Error(e);
+  }
+}
+function then$(result, fun) {
+  return try$(result, fun);
+}
 
 // build/dev/javascript/gleam_stdlib/dict.mjs
 var referenceMap = /* @__PURE__ */ new WeakMap();
@@ -887,6 +932,29 @@ function identity(x) {
 function to_string(term) {
   return term.toString();
 }
+function float_to_string(float3) {
+  const string3 = float3.toString().replace("+", "");
+  if (string3.indexOf(".") >= 0) {
+    return string3;
+  } else {
+    const index3 = string3.indexOf("e");
+    if (index3 >= 0) {
+      return string3.slice(0, index3) + ".0" + string3.slice(index3);
+    } else {
+      return string3 + ".0";
+    }
+  }
+}
+function string_replace(string3, target, substitute) {
+  if (typeof string3.replaceAll !== "undefined") {
+    return string3.replaceAll(target, substitute);
+  }
+  return string3.replace(
+    // $& means the whole matched string
+    new RegExp(target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
+    substitute
+  );
+}
 function string_length(string3) {
   if (string3 === "") {
     return 0;
@@ -908,6 +976,16 @@ function graphemes_iterator(string3) {
     segmenter ||= new Intl.Segmenter();
     return segmenter.segment(string3)[Symbol.iterator]();
   }
+}
+function join(xs, separator) {
+  const iterator = xs[Symbol.iterator]();
+  let result = iterator.next().value || "";
+  let current = iterator.next();
+  while (!current.done) {
+    result = result + separator + current.value;
+    current = iterator.next();
+  }
+  return result;
 }
 function string_slice(string3, idx, len) {
   if (len <= 0 || idx >= string3.length) {
@@ -956,6 +1034,9 @@ var trim_end_regex = new RegExp(`[${unicode_whitespaces}]*$`);
 var trim_regex = new RegExp(
   `^[${unicode_whitespaces}]*(.*?)[${unicode_whitespaces}]*$`
 );
+function round(float3) {
+  return Math.round(float3);
+}
 function new_map() {
   return Dict.new();
 }
@@ -965,10 +1046,33 @@ function map_to_list(map4) {
 function map_insert(key, value, map4) {
   return map4.set(key, value);
 }
+function bitwise_and(x, y) {
+  return Number(BigInt(x) & BigInt(y));
+}
+function bitwise_shift_right(x, y) {
+  return Number(BigInt(x) >> BigInt(y));
+}
 
 // build/dev/javascript/gleam_stdlib/gleam/dict.mjs
 function insert(dict, key, value) {
   return map_insert(key, value, dict);
+}
+function from_list_loop(loop$list, loop$initial) {
+  while (true) {
+    let list = loop$list;
+    let initial = loop$initial;
+    if (list.hasLength(0)) {
+      return initial;
+    } else {
+      let x = list.head;
+      let rest = list.tail;
+      loop$list = rest;
+      loop$initial = insert(initial, x[0], x[1]);
+    }
+  }
+}
+function from_list(list) {
+  return from_list_loop(list, new_map());
 }
 function reverse_and_concat(loop$remaining, loop$accumulator) {
   while (true) {
@@ -1002,9 +1106,51 @@ function keys(dict) {
   let list_of_pairs = map_to_list(dict);
   return do_keys_loop(list_of_pairs, toList([]));
 }
+function insert_pair(dict, pair) {
+  return insert(dict, pair[0], pair[1]);
+}
+function fold_inserts(loop$new_entries, loop$dict) {
+  while (true) {
+    let new_entries = loop$new_entries;
+    let dict = loop$dict;
+    if (new_entries.hasLength(0)) {
+      return dict;
+    } else {
+      let first2 = new_entries.head;
+      let rest = new_entries.tail;
+      loop$new_entries = rest;
+      loop$dict = insert_pair(dict, first2);
+    }
+  }
+}
+function merge(dict, new_entries) {
+  let _pipe = new_entries;
+  let _pipe$1 = map_to_list(_pipe);
+  return fold_inserts(_pipe$1, dict);
+}
+function fold_loop(loop$list, loop$initial, loop$fun) {
+  while (true) {
+    let list = loop$list;
+    let initial = loop$initial;
+    let fun = loop$fun;
+    if (list.hasLength(0)) {
+      return initial;
+    } else {
+      let k = list.head[0];
+      let v = list.head[1];
+      let rest = list.tail;
+      loop$list = rest;
+      loop$initial = fun(initial, k, v);
+      loop$fun = fun;
+    }
+  }
+}
+function fold(dict, initial, fun) {
+  return fold_loop(map_to_list(dict), initial, fun);
+}
 
 // build/dev/javascript/gleam_stdlib/gleam/list.mjs
-function fold(loop$list, loop$initial, loop$fun) {
+function fold2(loop$list, loop$initial, loop$fun) {
   while (true) {
     let list = loop$list;
     let initial = loop$initial;
@@ -1025,16 +1171,16 @@ function index_fold_loop(loop$over, loop$acc, loop$with, loop$index) {
     let over = loop$over;
     let acc = loop$acc;
     let with$ = loop$with;
-    let index2 = loop$index;
+    let index3 = loop$index;
     if (over.hasLength(0)) {
       return acc;
     } else {
       let first$1 = over.head;
       let rest$1 = over.tail;
       loop$over = rest$1;
-      loop$acc = with$(acc, first$1, index2);
+      loop$acc = with$(acc, first$1, index3);
       loop$with = with$;
-      loop$index = index2 + 1;
+      loop$index = index3 + 1;
     }
   }
 }
@@ -1043,6 +1189,12 @@ function index_fold(list, initial, fun) {
 }
 
 // build/dev/javascript/gleam_stdlib/gleam/string.mjs
+function replace(string3, pattern, substitute) {
+  let _pipe = string3;
+  let _pipe$1 = identity(_pipe);
+  let _pipe$2 = string_replace(_pipe$1, pattern, substitute);
+  return identity(_pipe$2);
+}
 function slice(string3, idx, len) {
   let $ = len < 0;
   if ($) {
@@ -1134,12 +1286,12 @@ function attribute_to_event_handler(attribute2) {
     return new Ok([name$1, handler]);
   }
 }
-function do_element_list_handlers(elements2, handlers2, key) {
+function do_element_list_handlers(elements3, handlers2, key) {
   return index_fold(
-    elements2,
+    elements3,
     handlers2,
-    (handlers3, element2, index2) => {
-      let key$1 = key + "-" + to_string(index2);
+    (handlers3, element2, index3) => {
+      let key$1 = key + "-" + to_string(index3);
       return do_handlers(element2, handlers3, key$1);
     }
   );
@@ -1159,7 +1311,7 @@ function do_handlers(loop$element, loop$handlers, loop$key) {
     } else {
       let attrs = element2.attrs;
       let children2 = element2.children;
-      let handlers$1 = fold(
+      let handlers$1 = fold2(
         attrs,
         handlers2,
         (handlers3, attr) => {
@@ -1188,7 +1340,7 @@ function attribute(name, value) {
 function style(properties) {
   return attribute(
     "style",
-    fold(
+    fold2(
       properties,
       "",
       (styles, _use1) => {
@@ -1358,9 +1510,9 @@ if (globalThis.customElements && !globalThis.customElements.get("lustre-fragment
 }
 function morph(prev, next, dispatch) {
   let out;
-  let stack2 = [{ prev, next, parent: prev.parentNode }];
-  while (stack2.length) {
-    let { prev: prev2, next: next2, parent } = stack2.pop();
+  let stack3 = [{ prev, next, parent: prev.parentNode }];
+  while (stack3.length) {
+    let { prev: prev2, next: next2, parent } = stack3.pop();
     while (next2.subtree !== void 0)
       next2 = next2.subtree();
     if (next2.content !== void 0) {
@@ -1382,7 +1534,7 @@ function morph(prev, next, dispatch) {
         prev: prev2,
         next: next2,
         dispatch,
-        stack: stack2
+        stack: stack3
       });
       if (!prev2) {
         parent.appendChild(created);
@@ -1394,7 +1546,7 @@ function morph(prev, next, dispatch) {
   }
   return out;
 }
-function createElementNode({ prev, next, dispatch, stack: stack2 }) {
+function createElementNode({ prev, next, dispatch, stack: stack3 }) {
   const namespace = next.namespace || "http://www.w3.org/1999/xhtml";
   const canMorph = prev && prev.nodeType === Node.ELEMENT_NODE && prev.localName === next.tag && prev.namespaceURI === (next.namespace || "http://www.w3.org/1999/xhtml");
   const el = canMorph ? prev : namespace ? document.createElementNS(namespace, next.tag) : document.createElement(next.tag);
@@ -1409,7 +1561,7 @@ function createElementNode({ prev, next, dispatch, stack: stack2 }) {
   const prevHandlers = canMorph ? new Set(handlersForEl.keys()) : null;
   const prevAttributes = canMorph ? new Set(Array.from(prev.attributes, (a) => a.name)) : null;
   let className = null;
-  let style2 = null;
+  let style3 = null;
   let innerHTML = null;
   if (canMorph && next.tag === "textarea") {
     const innertText = next.children[Symbol.iterator]().next().value?.content;
@@ -1452,7 +1604,7 @@ function createElementNode({ prev, next, dispatch, stack: stack2 }) {
     } else if (name === "class") {
       className = className === null ? value : className + " " + value;
     } else if (name === "style") {
-      style2 = style2 === null ? value : style2 + value;
+      style3 = style3 === null ? value : style3 + value;
     } else if (name === "dangerous-unescaped-html") {
       innerHTML = value;
     } else {
@@ -1469,8 +1621,8 @@ function createElementNode({ prev, next, dispatch, stack: stack2 }) {
     if (canMorph)
       prevAttributes.delete("class");
   }
-  if (style2 !== null) {
-    el.setAttribute("style", style2);
+  if (style3 !== null) {
+    el.setAttribute("style", style3);
     if (canMorph)
       prevAttributes.delete("style");
   }
@@ -1516,7 +1668,7 @@ function createElementNode({ prev, next, dispatch, stack: stack2 }) {
         prevChild,
         child,
         el,
-        stack2,
+        stack3,
         incomingKeyedChildren,
         keyedChildren,
         seenKeys
@@ -1524,7 +1676,7 @@ function createElementNode({ prev, next, dispatch, stack: stack2 }) {
     }
   } else {
     for (const child of children(next)) {
-      stack2.unshift({ prev: prevChild, next: child, parent: el });
+      stack3.unshift({ prev: prevChild, next: child, parent: el });
       prevChild = prevChild?.nextSibling;
     }
   }
@@ -1591,41 +1743,41 @@ function getKeyedChildren(el) {
   }
   return keyedChildren;
 }
-function diffKeyedChild(prevChild, child, el, stack2, incomingKeyedChildren, keyedChildren, seenKeys) {
+function diffKeyedChild(prevChild, child, el, stack3, incomingKeyedChildren, keyedChildren, seenKeys) {
   while (prevChild && !incomingKeyedChildren.has(prevChild.getAttribute("data-lustre-key"))) {
     const nextChild = prevChild.nextSibling;
     el.removeChild(prevChild);
     prevChild = nextChild;
   }
   if (keyedChildren.size === 0) {
-    stack2.unshift({ prev: prevChild, next: child, parent: el });
+    stack3.unshift({ prev: prevChild, next: child, parent: el });
     prevChild = prevChild?.nextSibling;
     return prevChild;
   }
   if (seenKeys.has(child.key)) {
     console.warn(`Duplicate key found in Lustre vnode: ${child.key}`);
-    stack2.unshift({ prev: null, next: child, parent: el });
+    stack3.unshift({ prev: null, next: child, parent: el });
     return prevChild;
   }
   seenKeys.add(child.key);
   const keyedChild = keyedChildren.get(child.key);
   if (!keyedChild && !prevChild) {
-    stack2.unshift({ prev: null, next: child, parent: el });
+    stack3.unshift({ prev: null, next: child, parent: el });
     return prevChild;
   }
   if (!keyedChild && prevChild !== null) {
     const placeholder = document.createTextNode("");
     el.insertBefore(placeholder, prevChild);
-    stack2.unshift({ prev: placeholder, next: child, parent: el });
+    stack3.unshift({ prev: placeholder, next: child, parent: el });
     return prevChild;
   }
   if (!keyedChild || keyedChild === prevChild) {
-    stack2.unshift({ prev: prevChild, next: child, parent: el });
+    stack3.unshift({ prev: prevChild, next: child, parent: el });
     prevChild = prevChild?.nextSibling;
     return prevChild;
   }
   el.insertBefore(keyedChild, prevChild);
-  stack2.unshift({ prev: keyedChild, next: child, parent: el });
+  stack3.unshift({ prev: keyedChild, next: child, parent: el });
   return prevChild;
 }
 function* children(element2) {
@@ -1934,6 +2086,12 @@ function start2(app, selector, flags) {
 }
 
 // build/dev/javascript/lustre/lustre/element/html.mjs
+function text2(content) {
+  return text(content);
+}
+function style2(attrs, css) {
+  return element("style", attrs, toList([text2(css)]));
+}
 function div(attrs, children2) {
   return element("div", attrs, children2);
 }
@@ -1941,23 +2099,586 @@ function p(attrs, children2) {
   return element("p", attrs, children2);
 }
 
-// build/dev/javascript/lustre_ui/lustre/ui/prose.mjs
+// build/dev/javascript/lustre_ui/lustre/ui/centre.mjs
+function of(element2, attributes, children2) {
+  return element2(
+    prepend(class$("lustre-ui-centre"), attributes),
+    toList([children2])
+  );
+}
+function centre(attributes, children2) {
+  return of(div, attributes, children2);
+}
+
+// build/dev/javascript/gleam_community_colour/gleam_community/colour.mjs
+var Rgba = class extends CustomType {
+  constructor(r, g, b, a) {
+    super();
+    this.r = r;
+    this.g = g;
+    this.b = b;
+    this.a = a;
+  }
+};
+function valid_colour_value(c) {
+  let $ = c > 1 || c < 0;
+  if ($) {
+    return new Error(void 0);
+  } else {
+    return new Ok(c);
+  }
+}
+function hue_to_rgb(hue, m1, m2) {
+  let h = (() => {
+    if (hue < 0) {
+      return hue + 1;
+    } else if (hue > 1) {
+      return hue - 1;
+    } else {
+      return hue;
+    }
+  })();
+  let h_t_6 = h * 6;
+  let h_t_2 = h * 2;
+  let h_t_3 = h * 3;
+  if (h_t_6 < 1) {
+    return m1 + (m2 - m1) * h * 6;
+  } else if (h_t_2 < 1) {
+    return m2;
+  } else if (h_t_3 < 2) {
+    return m1 + (m2 - m1) * (divideFloat(2, 3) - h) * 6;
+  } else {
+    return m1;
+  }
+}
+function hsla_to_rgba(h, s, l, a) {
+  let m2 = (() => {
+    let $ = l <= 0.5;
+    if ($) {
+      return l * (s + 1);
+    } else {
+      return l + s - l * s;
+    }
+  })();
+  let m1 = l * 2 - m2;
+  let r = hue_to_rgb(h + divideFloat(1, 3), m1, m2);
+  let g = hue_to_rgb(h, m1, m2);
+  let b = hue_to_rgb(h - divideFloat(1, 3), m1, m2);
+  return [r, g, b, a];
+}
+function from_rgb255(red2, green2, blue2) {
+  return then$(
+    (() => {
+      let _pipe = red2;
+      let _pipe$1 = identity(_pipe);
+      let _pipe$2 = divide(_pipe$1, 255);
+      return then$(_pipe$2, valid_colour_value);
+    })(),
+    (r) => {
+      return then$(
+        (() => {
+          let _pipe = green2;
+          let _pipe$1 = identity(_pipe);
+          let _pipe$2 = divide(_pipe$1, 255);
+          return then$(_pipe$2, valid_colour_value);
+        })(),
+        (g) => {
+          return then$(
+            (() => {
+              let _pipe = blue2;
+              let _pipe$1 = identity(_pipe);
+              let _pipe$2 = divide(_pipe$1, 255);
+              return then$(_pipe$2, valid_colour_value);
+            })(),
+            (b) => {
+              return new Ok(new Rgba(r, g, b, 1));
+            }
+          );
+        }
+      );
+    }
+  );
+}
+function from_rgb_hex(hex) {
+  let $ = hex > 16777215 || hex < 0;
+  if ($) {
+    return new Error(void 0);
+  } else {
+    let r = (() => {
+      let _pipe = bitwise_shift_right(hex, 16);
+      return bitwise_and(_pipe, 255);
+    })();
+    let g = (() => {
+      let _pipe = bitwise_shift_right(hex, 8);
+      return bitwise_and(_pipe, 255);
+    })();
+    let b = bitwise_and(hex, 255);
+    return from_rgb255(r, g, b);
+  }
+}
+function to_rgba(colour) {
+  if (colour instanceof Rgba) {
+    let r = colour.r;
+    let g = colour.g;
+    let b = colour.b;
+    let a = colour.a;
+    return [r, g, b, a];
+  } else {
+    let h = colour.h;
+    let s = colour.s;
+    let l = colour.l;
+    let a = colour.a;
+    return hsla_to_rgba(h, s, l, a);
+  }
+}
+function to_css_rgba_string(colour) {
+  let $ = to_rgba(colour);
+  let r = $[0];
+  let g = $[1];
+  let b = $[2];
+  let a = $[3];
+  let percent = (x) => {
+    let $1 = (() => {
+      let _pipe = x;
+      let _pipe$1 = multiply(_pipe, 1e4);
+      let _pipe$2 = round2(_pipe$1);
+      let _pipe$3 = identity(_pipe$2);
+      return divide(_pipe$3, 100);
+    })();
+    if (!$1.isOk()) {
+      throw makeError(
+        "assignment_no_match",
+        "gleam_community/colour",
+        706,
+        "",
+        "Assignment pattern did not match",
+        { value: $1 }
+      );
+    }
+    let p2 = $1[0];
+    return p2;
+  };
+  let round_to = (x) => {
+    let $1 = (() => {
+      let _pipe = x;
+      let _pipe$1 = multiply(_pipe, 1e3);
+      let _pipe$2 = round2(_pipe$1);
+      let _pipe$3 = identity(_pipe$2);
+      return divide(_pipe$3, 1e3);
+    })();
+    if (!$1.isOk()) {
+      throw makeError(
+        "assignment_no_match",
+        "gleam_community/colour",
+        718,
+        "",
+        "Assignment pattern did not match",
+        { value: $1 }
+      );
+    }
+    let r$1 = $1[0];
+    return r$1;
+  };
+  return join(
+    toList([
+      "rgba(",
+      float_to_string(percent(r)) + "%,",
+      float_to_string(percent(g)) + "%,",
+      float_to_string(percent(b)) + "%,",
+      float_to_string(round_to(a)),
+      ")"
+    ]),
+    ""
+  );
+}
+
+// build/dev/javascript/lustre_ui/lustre/ui/colour.mjs
+var Scale = class extends CustomType {
+  constructor(app_background, app_background_subtle, app_border, element_background, element_background_hover, element_background_strong, element_border_subtle, element_border_strong, solid_background, solid_background_hover, text_high_contrast, text_low_contrast) {
+    super();
+    this.app_background = app_background;
+    this.app_background_subtle = app_background_subtle;
+    this.app_border = app_border;
+    this.element_background = element_background;
+    this.element_background_hover = element_background_hover;
+    this.element_background_strong = element_background_strong;
+    this.element_border_subtle = element_border_subtle;
+    this.element_border_strong = element_border_strong;
+    this.solid_background = solid_background;
+    this.solid_background_hover = solid_background_hover;
+    this.text_high_contrast = text_high_contrast;
+    this.text_low_contrast = text_low_contrast;
+  }
+};
+function from_radix_scale(a, b, c, d, e, f, g, h, i, j, k, l) {
+  let $ = from_rgb_hex(a);
+  if (!$.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      56,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $ }
+    );
+  }
+  let app_background = $[0];
+  let $1 = from_rgb_hex(b);
+  if (!$1.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      57,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $1 }
+    );
+  }
+  let app_background_subtle = $1[0];
+  let $2 = from_rgb_hex(c);
+  if (!$2.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      58,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $2 }
+    );
+  }
+  let app_border = $2[0];
+  let $3 = from_rgb_hex(d);
+  if (!$3.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      59,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $3 }
+    );
+  }
+  let element_background = $3[0];
+  let $4 = from_rgb_hex(e);
+  if (!$4.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      60,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $4 }
+    );
+  }
+  let element_background_hover = $4[0];
+  let $5 = from_rgb_hex(f);
+  if (!$5.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      61,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $5 }
+    );
+  }
+  let element_background_strong = $5[0];
+  let $6 = from_rgb_hex(g);
+  if (!$6.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      62,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $6 }
+    );
+  }
+  let element_border_strong = $6[0];
+  let $7 = from_rgb_hex(h);
+  if (!$7.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      63,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $7 }
+    );
+  }
+  let element_border_subtle = $7[0];
+  let $8 = from_rgb_hex(i);
+  if (!$8.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      64,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $8 }
+    );
+  }
+  let solid_background = $8[0];
+  let $9 = from_rgb_hex(j);
+  if (!$9.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      65,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $9 }
+    );
+  }
+  let solid_background_hover = $9[0];
+  let $10 = from_rgb_hex(k);
+  if (!$10.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      66,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $10 }
+    );
+  }
+  let text_high_contrast = $10[0];
+  let $11 = from_rgb_hex(l);
+  if (!$11.isOk()) {
+    throw makeError(
+      "assignment_no_match",
+      "lustre/ui/colour",
+      67,
+      "from_radix_scale",
+      "Assignment pattern did not match",
+      { value: $11 }
+    );
+  }
+  let text_low_contrast = $11[0];
+  return new Scale(
+    app_background,
+    app_background_subtle,
+    app_border,
+    element_background,
+    element_background_hover,
+    element_background_strong,
+    element_border_subtle,
+    element_border_strong,
+    solid_background,
+    solid_background_hover,
+    text_high_contrast,
+    text_low_contrast
+  );
+}
+function grey() {
+  return from_radix_scale(
+    16579836,
+    16382457,
+    14540253,
+    15856113,
+    15461355,
+    15000804,
+    12303291,
+    13948116,
+    9276813,
+    8421504,
+    2105376,
+    6579300
+  );
+}
+function yellow() {
+  return from_radix_scale(
+    16645625,
+    16776160,
+    15523205,
+    16775366,
+    16577455,
+    16247451,
+    13216325,
+    14337390,
+    16507693,
+    16374288,
+    4668191,
+    7823144
+  );
+}
+function red() {
+  return from_radix_scale(
+    16776444,
+    16775159,
+    16369350,
+    16773103,
+    16770533,
+    16636120,
+    15437969,
+    15969967,
+    15026253,
+    14236994,
+    6559523,
+    12986927
+  );
+}
+function purple() {
+  return from_radix_scale(
+    16710910,
+    16644863,
+    14929140,
+    16380414,
+    15984636,
+    15588345,
+    12489700,
+    13874413,
+    9326278,
+    8668604,
+    4202592,
+    7944879
+  );
+}
+function blue() {
+  return from_radix_scale(
+    16514559,
+    16120575,
+    12048888,
+    15595263,
+    14807295,
+    13559806,
+    6205679,
+    9881586,
+    37375,
+    557290,
+    1127012,
+    747723
+  );
+}
+function green() {
+  return from_radix_scale(
+    16514812,
+    15924469,
+    11853764,
+    15333870,
+    14545892,
+    13429719,
+    6011276,
+    9621164,
+    3187820,
+    2725732,
+    1653549,
+    1603918
+  );
+}
+
+// build/dev/javascript/lustre_ui/lustre/ui/stack.mjs
 function of2(element2, attributes, children2) {
   return element2(
-    prepend(class$("lustre-ui-prose"), attributes),
+    prepend(class$("lustre-ui-stack"), attributes),
     children2
   );
 }
-function prose(attributes, children2) {
+function stack(attributes, children2) {
   return of2(div, attributes, children2);
 }
 
 // build/dev/javascript/lustre_ui/lustre/ui.mjs
-var prose2 = prose;
+var Theme = class extends CustomType {
+  constructor(primary, greyscale, error, warning, success, info) {
+    super();
+    this.primary = primary;
+    this.greyscale = greyscale;
+    this.error = error;
+    this.warning = warning;
+    this.success = success;
+    this.info = info;
+  }
+};
+var centre2 = centre;
+var stack2 = stack;
 
 // build/dev/javascript/lustre_ui/lustre/ui/classes.mjs
 function text_4xl() {
   return class$("text-4xl");
+}
+function font_alt() {
+  return class$("font-alt");
+}
+
+// build/dev/javascript/lustre_ui/lustre/ui/styles.mjs
+function scale_to_dict(scale, prefix) {
+  return from_list(
+    toList([
+      [
+        "$(" + prefix + ".app_background)",
+        to_css_rgba_string(scale.app_background)
+      ],
+      [
+        "$(" + prefix + ".app_background_subtle)",
+        to_css_rgba_string(scale.app_background_subtle)
+      ],
+      [
+        "$(" + prefix + ".app_border)",
+        to_css_rgba_string(scale.app_border)
+      ],
+      [
+        "$(" + prefix + ".element_background)",
+        to_css_rgba_string(scale.element_background)
+      ],
+      [
+        "$(" + prefix + ".element_background_hover)",
+        to_css_rgba_string(scale.element_background_hover)
+      ],
+      [
+        "$(" + prefix + ".element_background_strong)",
+        to_css_rgba_string(scale.element_background_strong)
+      ],
+      [
+        "$(" + prefix + ".element_border_subtle)",
+        to_css_rgba_string(scale.element_border_subtle)
+      ],
+      [
+        "$(" + prefix + ".element_border_strong)",
+        to_css_rgba_string(scale.element_border_strong)
+      ],
+      [
+        "$(" + prefix + ".solid_background)",
+        to_css_rgba_string(scale.solid_background)
+      ],
+      [
+        "$(" + prefix + ".solid_background_hover)",
+        to_css_rgba_string(scale.solid_background_hover)
+      ],
+      [
+        "$(" + prefix + ".text_high_contrast)",
+        to_css_rgba_string(scale.text_high_contrast)
+      ],
+      [
+        "$(" + prefix + ".text_low_contrast)",
+        to_css_rgba_string(scale.text_low_contrast)
+      ]
+    ])
+  );
+}
+function theme_to_dict(theme2) {
+  let _pipe = new_map();
+  let _pipe$1 = merge(_pipe, scale_to_dict(theme2.primary, "primary"));
+  let _pipe$2 = merge(
+    _pipe$1,
+    scale_to_dict(theme2.greyscale, "greyscale")
+  );
+  let _pipe$3 = merge(_pipe$2, scale_to_dict(theme2.error, "error"));
+  let _pipe$4 = merge(_pipe$3, scale_to_dict(theme2.success, "success"));
+  let _pipe$5 = merge(_pipe$4, scale_to_dict(theme2.warning, "warning"));
+  return merge(_pipe$5, scale_to_dict(theme2.info, "info"));
+}
+var theme_css = "\n:root {\n  --primary-app-background: $(primary.app_background);\n  --primary-app-background-subtle: $(primary.app_background_subtle);\n  --primary-app-border: $(primary.app_border);\n  --primary-element-background: $(primary.element_background);\n  --primary-element-background-hover: $(primary.element_background_hover);\n  --primary-element-background-strong: $(primary.element_background_strong);\n  --primary-element-border-subtle: $(primary.element_border_subtle);\n  --primary-element-border-strong: $(primary.element_border_strong);\n  --primary-solid-background: $(primary.solid_background);\n  --primary-solid-background-hover: $(primary.solid_background_hover);\n  --primary-text-high-contrast: $(primary.text_high_contrast);\n  --primary-text-low-contrast: $(primary.text_low_contrast);\n\n  --greyscale-app-background: $(greyscale.app_background);\n  --greyscale-app-background-subtle: $(greyscale.app_background_subtle);\n  --greyscale-app-border: $(greyscale.app_border);\n  --greyscale-element-background: $(greyscale.element_background);\n  --greyscale-element-background-hover: $(greyscale.element_background_hover);\n  --greyscale-element-background-strong: $(greyscale.element_background_strong);\n  --greyscale-element-border-subtle: $(greyscale.element_border_subtle);\n  --greyscale-element-border-strong: $(greyscale.element_border_strong);\n  --greyscale-solid-background: $(greyscale.solid_background);\n  --greyscale-solid-background-hover: $(greyscale.solid_background_hover);\n  --greyscale-text-high-contrast: $(greyscale.text_high_contrast);\n  --greyscale-text-low-contrast: $(greyscale.text_low_contrast);\n\n  --error-app-background: $(error.app_background);\n  --error-app-background-subtle: $(error.app_background_subtle);\n  --error-app-border: $(error.app_border);\n  --error-element-background: $(error.element_background);\n  --error-element-background-hover: $(error.element_background_hover);\n  --error-element-background-strong: $(error.element_background_strong);\n  --error-element-border-subtle: $(error.element_border_subtle);\n  --error-element-border-strong: $(error.element_border_strong);\n  --error-solid-background: $(error.solid_background);\n  --error-solid-background-hover: $(error.solid_background_hover);\n  --error-text-high-contrast: $(error.text_high_contrast);\n  --error-text-low-contrast: $(error.text_low_contrast);\n\n  --success-app-background: $(success.app_background);\n  --success-app-background-subtle: $(success.app_background_subtle);\n  --success-app-border: $(success.app_border);\n  --success-element-background: $(success.element_background);\n  --success-element-background-hover: $(success.element_background_hover);\n  --success-element-background-strong: $(success.element_background_strong);\n  --success-element-border-subtle: $(success.element_border_subtle);\n  --success-element-border-strong: $(success.element_border_strong);\n  --success-solid-background: $(success.solid_background);\n  --success-solid-background-hover: $(success.solid_background_hover);\n  --success-text-high-contrast: $(success.text_high_contrast);\n  --success-text-low-contrast: $(success.text_low_contrast);\n\n  --warning-app-background: $(warning.app_background);\n  --warning-app-background-subtle: $(warning.app_background_subtle);\n  --warning-app-border: $(warning.app_border);\n  --warning-element-background: $(warning.element_background);\n  --warning-element-background-hover: $(warning.element_background_hover);\n  --warning-element-background-strong: $(warning.element_background_strong);\n  --warning-element-border-subtle: $(warning.element_border_subtle);\n  --warning-element-border-strong: $(warning.element_border_strong);\n  --warning-solid-background: $(warning.solid_background);\n  --warning-solid-background-hover: $(warning.solid_background_hover);\n  --warning-text-high-contrast: $(warning.text_high_contrast);\n  --warning-text-low-contrast: $(warning.text_low_contrast);\n\n  --info-app-background: $(info.app_background);\n  --info-app-background-subtle: $(info.app_background_subtle);\n  --info-app-border: $(info.app_border);\n  --info-element-background: $(info.element_background);\n  --info-element-background-hover: $(info.element_background_hover);\n  --info-element-background-strong: $(info.element_background_strong);\n  --info-element-border-subtle: $(info.element_border_subtle);\n  --info-element-border-strong: $(info.element_border_strong);\n  --info-solid-background: $(info.solid_background);\n  --info-solid-background-hover: $(info.solid_background_hover);\n  --info-text-high-contrast: $(info.text_high_contrast);\n  --info-text-low-contrast: $(info.text_low_contrast);\n}\n";
+function theme(theme2) {
+  let _pipe = theme_to_dict(theme2);
+  let _pipe$1 = fold(_pipe, theme_css, replace);
+  return ((_capture) => {
+    return style2(toList([]), _capture);
+  })(_pipe$1);
+}
+var element_css = '\n*,:after,:before{border:0 solid;box-sizing:border-box}html{-webkit-text-size-adjust:100%;font-feature-settings:normal;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;font-variation-settings:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4}body{line-height:inherit;margin:0}hr{border-top-width:1px;color:inherit;height:0}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{border-collapse:collapse;border-color:inherit;text-indent:0}button,input,optgroup,select,textarea{font-feature-settings:inherit;color:inherit;font-family:inherit;font-size:100%;font-variation-settings:inherit;font-weight:inherit;line-height:inherit;margin:0;padding:0}button,select{text-transform:none}[type=button],[type=reset],[type=submit],button{-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0}fieldset,legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::-moz-placeholder,textarea::-moz-placeholder{color:#9ca3af;opacity:1}input::placeholder,textarea::placeholder{color:#9ca3af;opacity:1}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{height:auto;max-width:100%}[hidden]{display:none}.bg-app{background-color:var(--app-background)}.bg-app-subtle{background-color:var(--app-background-subtle)}.bg-element{background-color:var(--element-background)}.bg-element-hover{background-color:var(--element-background-hover)}.bg-element-strong{background-color:var(--element-background-strong)}.bg-solid{background-color:var(--solid-background)}.bg-solid-hover{background-color:var(--solid-background-hover)}.border-app{border:1px solid var(--app-border)}.border-element-subtle{border:1px solid var(--element-border-subtle)}.border-element-strong{border:1px solid var(--element-border-strong)}.text-high-contrast{color:var(--text-high-contrast)}.text-low-contrast{color:var(--text-low-contrast)}.text-xs{font-size:var(--text-xs)}.text-sm{font-size:var(--text-sm)}.text-md{font-size:var(--text-md)}.text-lg{font-size:var(--text-lg)}.text-xl{font-size:var(--text-xl)}.text-2xl{font-size:var(--text-2xl)}.text-3xl{font-size:var(--text-3xl)}.text-4xl{font-size:var(--text-4xl)}.text-5xl{font-size:var(--text-5xl)}.p-2xs{padding:var(--space-2xs)}.p-xs{padding:var(--space-xs)}.p-sm{padding:var(--space-sm)}.p-md{padding:var(--space-md)}.p-lg{padding:var(--space-lg)}.p-xl{padding:var(--space-xl)}.p-2xl{padding:var(--space-2xl)}.p-3xl{padding:var(--space-3xl)}.p-4xl{padding:var(--space-4xl)}.p-5xl{padding:var(--space-5xl)}.px-2xs{padding-left:var(--space-2xs);padding-right:var(--space-2xs)}.px-xs{padding-left:var(--space-xs);padding-right:var(--space-xs)}.px-sm{padding-left:var(--space-sm);padding-right:var(--space-sm)}.px-md{padding-left:var(--space-md);padding-right:var(--space-md)}.px-lg{padding-left:var(--space-lg);padding-right:var(--space-lg)}.px-xl{padding-left:var(--space-xl);padding-right:var(--space-xl)}.px-2xl{padding-left:var(--space-2xl);padding-right:var(--space-2xl)}.px-3xl{padding-left:var(--space-3xl);padding-right:var(--space-3xl)}.px-4xl{padding-left:var(--space-4xl);padding-right:var(--space-4xl)}.px-5xl{padding-left:var(--space-5xl);padding-right:var(--space-5xl)}.py-2xs{padding-bottom:var(--space-2xs);padding-top:var(--space-2xs)}.py-xs{padding-bottom:var(--space-xs);padding-top:var(--space-xs)}.py-sm{padding-bottom:var(--space-sm);padding-top:var(--space-sm)}.py-md{padding-bottom:var(--space-md);padding-top:var(--space-md)}.py-lg{padding-bottom:var(--space-lg);padding-top:var(--space-lg)}.py-xl{padding-bottom:var(--space-xl);padding-top:var(--space-xl)}.py-2xl{padding-bottom:var(--space-2xl);padding-top:var(--space-2xl)}.py-3xl{padding-bottom:var(--space-3xl);padding-top:var(--space-3xl)}.py-4xl{padding-bottom:var(--space-4xl);padding-top:var(--space-4xl)}.py-5xl{padding-bottom:var(--space-5xl);padding-top:var(--space-5xl)}.pt-2xs{padding-top:var(--space-2xs)}.pt-xs{padding-top:var(--space-xs)}.pt-sm{padding-top:var(--space-sm)}.pt-md{padding-top:var(--space-md)}.pt-lg{padding-top:var(--space-lg)}.pt-xl{padding-top:var(--space-xl)}.pt-2xl{padding-top:var(--space-2xl)}.pt-3xl{padding-top:var(--space-3xl)}.pt-4xl{padding-top:var(--space-4xl)}.pt-5xl{padding-top:var(--space-5xl)}.pr-2xs{padding-right:var(--space-2xs)}.pr-xs{padding-right:var(--space-xs)}.pr-sm{padding-right:var(--space-sm)}.pr-md{padding-right:var(--space-md)}.pr-lg{padding-right:var(--space-lg)}.pr-xl{padding-right:var(--space-xl)}.pr-2xl{padding-right:var(--space-2xl)}.pr-3xl{padding-right:var(--space-3xl)}.pr-4xl{padding-right:var(--space-4xl)}.pr-5xl{padding-right:var(--space-5xl)}.pb-2xs{padding-bottom:var(--space-2xs)}.pb-xs{padding-bottom:var(--space-xs)}.pb-sm{padding-bottom:var(--space-sm)}.pb-md{padding-bottom:var(--space-md)}.pb-lg{padding-bottom:var(--space-lg)}.pb-xl{padding-bottom:var(--space-xl)}.pb-2xl{padding-bottom:var(--space-2xl)}.pb-3xl{padding-bottom:var(--space-3xl)}.pb-4xl{padding-bottom:var(--space-4xl)}.pb-5xl{padding-bottom:var(--space-5xl)}.m-2xs{margin:var(--space-2xs)}.m-xs{margin:var(--space-xs)}.m-sm{margin:var(--space-sm)}.m-md{margin:var(--space-md)}.m-lg{margin:var(--space-lg)}.m-xl{margin:var(--space-xl)}.m-2xl{margin:var(--space-2xl)}.m-3xl{margin:var(--space-3xl)}.m-4xl{margin:var(--space-4xl)}.m-5xl{margin:var(--space-5xl)}.mx-2xs{margin-left:var(--space-2xs);margin-right:var(--space-2xs)}.mx-xs{margin-left:var(--space-xs);margin-right:var(--space-xs)}.mx-sm{margin-left:var(--space-sm);margin-right:var(--space-sm)}.mx-md{margin-left:var(--space-md);margin-right:var(--space-md)}.mx-lg{margin-left:var(--space-lg);margin-right:var(--space-lg)}.mx-xl{margin-left:var(--space-xl);margin-right:var(--space-xl)}.mx-2xl{margin-left:var(--space-2xl);margin-right:var(--space-2xl)}.mx-3xl{margin-left:var(--space-3xl);margin-right:var(--space-3xl)}.mx-4xl{margin-left:var(--space-4xl);margin-right:var(--space-4xl)}.mx-5xl{margin-left:var(--space-5xl);margin-right:var(--space-5xl)}.my-2xs{margin-bottom:var(--space-2xs);margin-top:var(--space-2xs)}.my-xs{margin-bottom:var(--space-xs);margin-top:var(--space-xs)}.my-sm{margin-bottom:var(--space-sm);margin-top:var(--space-sm)}.my-md{margin-bottom:var(--space-md);margin-top:var(--space-md)}.my-lg{margin-bottom:var(--space-lg);margin-top:var(--space-lg)}.my-xl{margin-bottom:var(--space-xl);margin-top:var(--space-xl)}.my-2xl{margin-bottom:var(--space-2xl);margin-top:var(--space-2xl)}.my-3xl{margin-bottom:var(--space-3xl);margin-top:var(--space-3xl)}.my-4xl{margin-bottom:var(--space-4xl);margin-top:var(--space-4xl)}.my-5xl{margin-bottom:var(--space-5xl);margin-top:var(--space-5xl)}.mt-2xs{margin-top:var(--space-2xs)}.mt-xs{margin-top:var(--space-xs)}.mt-sm{margin-top:var(--space-sm)}.mt-md{margin-top:var(--space-md)}.mt-lg{margin-top:var(--space-lg)}.mt-xl{margin-top:var(--space-xl)}.mt-2xl{margin-top:var(--space-2xl)}.mt-3xl{margin-top:var(--space-3xl)}.mt-4xl{margin-top:var(--space-4xl)}.mt-5xl{margin-top:var(--space-5xl)}.mr-2xs{margin-right:var(--space-2xs)}.mr-xs{margin-right:var(--space-xs)}.mr-sm{margin-right:var(--space-sm)}.mr-md{margin-right:var(--space-md)}.mr-lg{margin-right:var(--space-lg)}.mr-xl{margin-right:var(--space-xl)}.mr-2xl{margin-right:var(--space-2xl)}.mr-3xl{margin-right:var(--space-3xl)}.mr-4xl{margin-right:var(--space-4xl)}.mr-5xl{margin-right:var(--space-5xl)}.mb-2xs{margin-bottom:var(--space-2xs)}.mb-xs{margin-bottom:var(--space-xs)}.mb-sm{margin-bottom:var(--space-sm)}.mb-md{margin-bottom:var(--space-md)}.mb-lg{margin-bottom:var(--space-lg)}.mb-xl{margin-bottom:var(--space-xl)}.mb-2xl{margin-bottom:var(--space-2xl)}.mb-3xl{margin-bottom:var(--space-3xl)}.mb-4xl{margin-bottom:var(--space-4xl)}.mb-5xl{margin-bottom:var(--space-5xl)}.ml-2xs{margin-left:var(--space-2xs)}.ml-xs{margin-left:var(--space-xs)}.ml-sm{margin-left:var(--space-sm)}.ml-md{margin-left:var(--space-md)}.ml-lg{margin-left:var(--space-lg)}.ml-xl{margin-left:var(--space-xl)}.ml-2xl{margin-left:var(--space-2xl)}.ml-3xl{margin-left:var(--space-3xl)}.ml-4xl{margin-left:var(--space-4xl)}.ml-5xl{margin-left:var(--space-5xl)}.font-base{font-family:var(--font-base)}.font-alt{font-family:var(--font-alt)}.font-mono{font-family:var(--font-mono)}.shadow-sm{box-shadow:var(--shadow-sm)}.shadow-md{box-shadow:var(--shadow-md)}.shadow-lg{box-shadow:var(--shadow-lg)}:root{--primary-app-background:#fdfdff;--primary-app-background-subtle:#fafaff;--primary-app-border:#d0d0fa;--primary-element-background:#f3f3ff;--primary-element-background-hover:#ebebfe;--primary-element-background-strong:#e0e0fd;--primary-element-border-subtle:#babbf5;--primary-element-border-strong:#9b9ef0;--primary-solid-background:#5b5bd6;--primary-solid-background-hover:#5353ce;--primary-text-high-contrast:#272962;--primary-text-low-contrast:#4747c2;--greyscale-app-background:#fcfcfd;--greyscale-app-background-subtle:#f9f9fb;--greyscale-app-border:#dddde3;--greyscale-element-background:#f2f2f5;--greyscale-element-background-hover:#ebebef;--greyscale-element-background-strong:#e4e4e9;--greyscale-element-border-subtle:#d3d4db;--greyscale-element-border-strong:#b9bbc6;--greyscale-solid-background:#8b8d98;--greyscale-solid-background-hover:#7e808a;--greyscale-text-high-contrast:#1c2024;--greyscale-text-low-contrast:#60646c;--error-app-background:#fffcfc;--error-app-background-subtle:#fff7f7;--error-app-border:#f9c6c6;--error-element-background:#ffefef;--error-element-background-hover:#ffe5e5;--error-element-background-strong:#fdd8d8;--error-element-border-subtle:#f3aeaf;--error-element-border-strong:#eb9091;--error-solid-background:#e5484d;--error-solid-background-hover:#d93d42;--error-text-high-contrast:#641723;--error-text-low-contrast:#c62a2f;--success-app-background:#fbfefc;--success-app-background-subtle:#f2fcf5;--success-app-border:#b4dfc4;--success-element-background:#e9f9ee;--success-element-background-hover:#ddf3e4;--success-element-background-strong:#ccebd7;--success-element-border-subtle:#92ceac;--success-element-border-strong:#5bb98c;--success-solid-background:#30a46c;--success-solid-background-hover:#299764;--success-text-high-contrast:#193b2d;--success-text-low-contrast:#18794e;--warning-app-background:#fdfdf9;--warning-app-background-subtle:#fffbe0;--warning-app-border:#ecdd85;--warning-element-background:#fff8c6;--warning-element-background-hover:#fcf3af;--warning-element-background-strong:#f7ea9b;--warning-element-border-subtle:#dac56e;--warning-element-border-strong:#c9aa45;--warning-solid-background:#fbe32d;--warning-solid-background-hover:#f9da10;--warning-text-high-contrast:#473b1f;--warning-text-low-contrast:#775f28;--info-app-background:#fbfdff;--info-app-background-subtle:#f5faff;--info-app-border:#b7d9f8;--info-element-background:#edf6ff;--info-element-background-hover:#e1f0ff;--info-element-background-strong:#cee7fe;--info-element-border-subtle:#96c7f2;--info-element-border-strong:#5eb0ef;--info-solid-background:#0091ff;--info-solid-background-hover:#0880ea;--info-text-high-contrast:#113264;--info-text-low-contrast:#0b68cb;--app-background:var(--primary-app-background);--app-background-subtle:var(--primary-app-background-subtle);--app-border:var(--primary-app-border);--element-background:var(--primary-element-background);--element-background-hover:var(--primary-element-background-hover);--element-background-strong:var(--primary-element-background-strong);--element-border-subtle:var(--primary-element-border-subtle);--element-border-strong:var(--primary-element-border-strong);--solid-background:var(--primary-solid-background);--solid-background-hover:var(--primary-solid-background-hover);--text-high-contrast:var(--primary-text-high-contrast);--text-low-contrast:var(--primary-text-low-contrast);--text-xs:calc(var(--text-sm)/1.25);--text-sm:calc(var(--text-md)/1.25);--text-md:14px;--text-lg:calc(var(--text-md)*1.25);--text-xl:calc(var(--text-lg)*1.25);--text-2xl:calc(var(--text-xl)*1.25);--text-3xl:calc(var(--text-2xl)*1.25);--text-4xl:calc(var(--text-3xl)*1.25);--text-5xl:calc(var(--text-4xl)*1.25);--space-2xs:0.25rem;--space-xs:0.5rem;--space-sm:0.75rem;--space-md:1rem;--space-lg:1.25rem;--space-xl:2rem;--space-2xl:3.25rem;--space-3xl:5.25rem;--space-4xl:8.5rem;--space-5xl:13.75rem;--font-base:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";--font-alt:ui-serif,Georgia,Cambria,"Times New Roman",Times,serif;--font-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;--border-radius:4px;--shadow-sm:0 1px 2px 0 rgba(0,0,0,.05);--shadow-md:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1);--shadow-lg:0 20px 25px -5px rgba(0,0,0,.1),0 8px 10px -6px rgba(0,0,0,.1)}[data-variant=primary]{--app-background:var(--primary-app-background);--app-background-subtle:var(--primary-app-background-subtle);--app-border:var(--primary-app-border);--element-background:var(--primary-element-background);--element-background-hover:var(--primary-element-background-hover);--element-background-strong:var(--primary-element-background-strong);--element-border-subtle:var(--primary-element-border-subtle);--element-border-strong:var(--primary-element-border-strong);--solid-background:var(--primary-solid-background);--solid-background-hover:var(--primary-solid-background-hover);--text-high-contrast:var(--primary-text-high-contrast);--text-low-contrast:var(--primary-text-low-contrast);color:var(--text-high-contrast)}[data-variant=greyscale]{--app-background:var(--greyscale-app-background);--app-background-subtle:var(--greyscale-app-background-subtle);--app-border:var(--greyscale-app-border);--element-background:var(--greyscale-element-background);--element-background-hover:var(--greyscale-element-background-hover);--element-background-strong:var(--greyscale-element-background-strong);--element-border-subtle:var(--greyscale-element-border-subtle);--element-border-strong:var(--greyscale-element-border-strong);--solid-background:var(--greyscale-solid-background);--solid-background-hover:var(--greyscale-solid-background-hover);--text-high-contrast:var(--greyscale-text-high-contrast);--text-low-contrast:var(--greyscale-text-low-contrast);color:var(--text-high-contrast)}[data-variant=error]{--app-background:var(--error-app-background);--app-background-subtle:var(--error-app-background-subtle);--app-border:var(--error-app-border);--element-background:var(--error-element-background);--element-background-hover:var(--error-element-background-hover);--element-background-strong:var(--error-element-background-strong);--element-border-subtle:var(--error-element-border-subtle);--element-border-strong:var(--error-element-border-strong);--solid-background:var(--error-solid-background);--solid-background-hover:var(--error-solid-background-hover);--text-high-contrast:var(--error-text-high-contrast);--text-low-contrast:var(--error-text-low-contrast);color:var(--text-high-contrast)}[data-variant=success]{--app-background:var(--success-app-background);--app-background-subtle:var(--success-app-background-subtle);--app-border:var(--success-app-border);--element-background:var(--success-element-background);--element-background-hover:var(--success-element-background-hover);--element-background-strong:var(--success-element-background-strong);--element-border-subtle:var(--success-element-border-subtle);--element-border-strong:var(--success-element-border-strong);--solid-background:var(--success-solid-background);--solid-background-hover:var(--success-solid-background-hover);--text-high-contrast:var(--success-text-high-contrast);--text-low-contrast:var(--success-text-low-contrast);color:var(--text-high-contrast)}[data-variant=warning]{--app-background:var(--warning-app-background);--app-background-subtle:var(--warning-app-background-subtle);--app-border:var(--warning-app-border);--element-background:var(--warning-element-background);--element-background-hover:var(--warning-element-background-hover);--element-background-strong:var(--warning-element-background-strong);--element-border-subtle:var(--warning-element-border-subtle);--element-border-strong:var(--warning-element-border-strong);--solid-background:var(--warning-solid-background);--solid-background-hover:var(--warning-solid-background-hover);--text-high-contrast:var(--warning-text-high-contrast);--text-low-contrast:var(--warning-text-low-contrast);color:var(--text-high-contrast)}[data-variant=info]{--app-background:var(--info-app-background);--app-background-subtle:var(--info-app-background-subtle);--app-border:var(--info-app-border);--element-background:var(--info-element-background);--element-background-hover:var(--info-element-background-hover);--element-background-strong:var(--info-element-background-strong);--element-border-subtle:var(--info-element-border-subtle);--element-border-strong:var(--info-element-border-strong);--solid-background:var(--info-solid-background);--solid-background-hover:var(--info-solid-background-hover);--text-high-contrast:var(--info-text-high-contrast);--text-low-contrast:var(--info-text-low-contrast);color:var(--text-high-contrast)}.lustre-ui-alert,.use-lustre-ui .alert{--bg:var(--element-background);--border:var(--element-border-subtle);--text:var(--text-high-contrast);background-color:var(--bg);border:1px solid var(--border);border-radius:var(--border-radius);box-shadow:var(--shadow-sm);padding:var(--space-sm)}.clear:is(.use-lustre-ui .alert,.lustre-ui-alert){--bg:unsert}.lustre-ui-aside,.use-lustre-ui .aside{--align:start;--gap:var(--space-md);--dir:row;--wrap:wrap;--min:60%;align-items:var(--align);display:flex;flex-direction:var(--dir);flex-wrap:var(--wrap);gap:var(--gap)}.content-first:is(.use-lustre-ui .aside,.lustre-ui-aside){--dir:row;--wrap:wrap}.content-last:is(.use-lustre-ui .aside,.lustre-ui-aside){--dir:row-reverse;--wrap:wrap-reverse}.align-start:is(.use-lustre-ui .aside,.lustre-ui-aside){--align:start}.align-center:is(.use-lustre-ui .aside,.lustre-ui-aside),.align-centre:is(.use-lustre-ui .aside,.lustre-ui-aside){--align:center}.align-end:is(.use-lustre-ui .aside,.lustre-ui-aside){--align:end}.stretch:is(.use-lustre-ui .aside,.lustre-ui-aside){--align:stretch}.packed:is(.use-lustre-ui .aside,.lustre-ui-aside){--gap:0}.tight:is(.use-lustre-ui .aside,.lustre-ui-aside){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .aside,.lustre-ui-aside){--gap:var(--space-md)}.loose:is(.use-lustre-ui .aside,.lustre-ui-aside){--gap:var(--space-lg)}:is(.use-lustre-ui .aside,.lustre-ui-aside)>:first-child{flex-basis:0;flex-grow:999;min-inline-size:var(--min)}:is(.use-lustre-ui .aside,.lustre-ui-aside)>:last-child{flex-grow:1;max-height:-moz-max-content;max-height:max-content}.lustre-ui-box,.use-lustre-ui .box{--gap:var(--space-sm);padding:var(--gap)}.packed:is(.use-lustre-ui .box,.lustre-ui-box){--gap:0}.tight:is(.use-lustre-ui .box,.lustre-ui-box){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .box,.lustre-ui-box){--gap:var(--space-md)}.loose:is(.use-lustre-ui .box,.lustre-ui-box){--gap:var(--space-lg)}.lustre-ui-breadcrumbs,.use-lustre-ui .breadcrumbs{--gap:var(--space-sm);--align:center;align-items:var(--align);display:flex;flex-wrap:nowrap;gap:var(--gap);justify-content:start;overflow-x:auto}.tight:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--gap:var(--space-sm)}.loose:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--gap:var(--space-md)}.align-start:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--align:start}.align-center:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs),.align-centre:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--align:center}.align-end:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs){--align:end}:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs)>*{flex:0 0 auto}:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs):not(:has(.active))>:last-child,:is(.use-lustre-ui .breadcrumbs,.lustre-ui-breadcrumbs)>.active{color:var(--text-low-contrast)}.lustre-ui-button,.use-lustre-ui .button,.use-lustre-ui button{--bg-active:var(--element-background-strong);--bg-hover:var(--element-background-hover);--bg:var(--element-background);--border-active:var(--bg-active);--border:var(--bg);--text:var(--text-high-contrast);--padding-y:var(--space-xs);--padding-x:var(--space-sm);background-color:var(--bg);border:1px solid var(--border,var(--bg),var(--element-border-subtle));border-radius:var(--border-radius);color:var(--text);padding:var(--padding-y) var(--padding-x)}:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):focus-within,:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):hover{background-color:var(--bg-hover)}:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):focus-within:active,:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):hover:active{background-color:var(--bg-active);border-color:var(--border-active)}.small:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button){--padding-y:var(--space-2xs);--padding-x:var(--space-xs)}.solid:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button){--bg-active:var(--solid-background-hover);--bg-hover:var(--solid-background-hover);--bg:var(--solid-background);--border-active:var(--solid-background-hover);--border:var(--solid-background);--text:#fff}.solid:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):focus-within:active,.solid:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button):hover:active{--bg-active:color-mix(in srgb,var(--solid-background-hover) 90%,#000);--border-active:color-mix(in srgb,var(--solid-background-hover) 90%,#000)}.soft:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button){--bg-active:var(--element-background-strong);--bg-hover:var(--element-background-hover);--bg:var(--element-background);--border-active:var(--bg-active);--border:var(--bg);--text:var(--text-high-contrast)}.outline:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button){--bg:unset;--border:var(--element-border-subtle)}.clear:is(.use-lustre-ui button,.use-lustre-ui .button,.lustre-ui-button){--bg:unset;--border:unset}.lustre-ui-center,.lustre-ui-centre,.use-lustre-ui .center,.use-lustre-ui .centre{--display:flex;align-items:center;display:var(--display);justify-content:center}.inline:is(.use-lustre-ui .centre,.use-lustre-ui .center,.lustre-ui-centre,.lustre-ui-center){--display:inline-flex}.lustre-ui-cluster,.use-lustre-ui .cluster{--gap:var(--space-md);--dir:flex-start;--align:center;align-items:var(--align);display:flex;flex-wrap:wrap;gap:var(--gap);justify-content:var(--dir)}.packed:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--gap:0}.tight:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--gap:var(--space-md)}.loose:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--gap:var(--space-lg)}.from-start:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--dir:flex-start}.from-end:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--dir:flex-end}.align-start:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--align:start}.align-center:is(.use-lustre-ui .cluster,.lustre-ui-cluster),.align-centre:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--align:center}.align-end:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--align:end}.stretch:is(.use-lustre-ui .cluster,.lustre-ui-cluster){--align:stretch}.lustre-ui-field,.use-lustre-ui .field{--label:var(--text-high-contrast);--label-align:start;--message:var(--text-low-contrast);--message-align:end;--text-size:var(--text-md)}.small:is(.use-lustre-ui .field,.lustre-ui-field){--text-size:var(--text-sm)}.label-start:is(.use-lustre-ui .field,.lustre-ui-field){--label-align:start}.label-center:is(.use-lustre-ui .field,.lustre-ui-field),.label-centre:is(.use-lustre-ui .field,.lustre-ui-field){--label-align:center}.label-end:is(.use-lustre-ui .field,.lustre-ui-field){--label-align:end}.message-start:is(.use-lustre-ui .field,.lustre-ui-field){--message-align:start}.message-center:is(.use-lustre-ui .field,.lustre-ui-field),.message-centre:is(.use-lustre-ui .field,.lustre-ui-field){--message-align:center}.message-end:is(.use-lustre-ui .field,.lustre-ui-field){--message-align:end}:is(.use-lustre-ui .field,.lustre-ui-field):has(input:disabled)>:is(.label,.message){opacity:.5}:is(.use-lustre-ui .field,.lustre-ui-field)>:not(input){color:var(--label);font-size:var(--text-size)}:is(.use-lustre-ui .field,.lustre-ui-field)>.label{display:inline-flex;justify-content:var(--label-align)}:is(.use-lustre-ui .field,.lustre-ui-field)>.message{color:var(--message);display:inline-flex;justify-content:var(--message-align)}.lustre-ui-group,.use-lustre-ui .group{align-items:stretch;display:inline-flex}:is(.use-lustre-ui .group,.lustre-ui-group)>:first-child{border-radius:var(--border-radius) 0 0 var(--border-radius)!important}:is(.use-lustre-ui .group,.lustre-ui-group)>:not(:first-child):not(:last-child){border-radius:0!important}:is(.use-lustre-ui .group,.lustre-ui-group)>:last-child{border-radius:0 var(--border-radius) var(--border-radius) 0!important}.lustre-ui-icon,.use-lustre-ui .icon{--size:1em;display:inline;height:var(--size);width:var(--size)}.xs:is(.use-lustre-ui .icon,.lustre-ui-icon){--size:var(--text-xs)}.sm:is(.use-lustre-ui .icon,.lustre-ui-icon){--size:var(--text-sm)}.md:is(.use-lustre-ui .icon,.lustre-ui-icon){--size:var(--text-md)}.lg:is(.use-lustre-ui .icon,.lustre-ui-icon){--size:var(--text-lg)}.xl:is(.use-lustre-ui .icon,.lustre-ui-icon){--size:var(--text-xl)}.lustre-ui-input,.use-lustre-ui .input,.use-lustre-ui input:not([type~="checkbox file radio range"]){--border-active:var(--element-border-strong);--border:var(--element-border-subtle);--outline:var(--element-border-subtle);--text:var(--text-high-contrast);--text-placeholder:var(--text-low-contrast);--padding-y:var(--space-xs);--padding-x:var(--space-sm);border:1px solid var(--border,var(--bg),var(--element-border-subtle));border-radius:var(--border-radius);color:var(--text);padding:var(--padding-y) var(--padding-x)}:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input):hover{border-color:var(--border-active)}:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input):focus-within{border-color:var(--border-active);outline:1px solid var(--outline);outline-offset:2px}:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input)::-moz-placeholder{color:var(--text-placeholder)}:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input)::placeholder{color:var(--text-placeholder)}:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input):disabled{opacity:.5}.clear:is(.use-lustre-ui input:not([type~="checkbox file radio range"]),.use-lustre-ui .input,.lustre-ui-input){--border:unset}.lustre-ui-prose,.use-lustre-ui .prose{--width:60ch;width:var(--width)}.wide:is(.use-lustre-ui .prose,.lustre-ui-prose){--width:80ch}.full:is(.use-lustre-ui .prose,.lustre-ui-prose){--width:100%}:is(.use-lustre-ui .prose,.lustre-ui-prose) *+*{margin-top:var(--space-md)}:is(.use-lustre-ui .prose,.lustre-ui-prose) :not(h1,h2,h3,h4,h5,h6)+:is(h1,h2,h3,h4,h5,h6){margin-top:var(--space-xl)}:is(.use-lustre-ui .prose,.lustre-ui-prose) h1{font-size:var(--text-3xl)}:is(.use-lustre-ui .prose,.lustre-ui-prose) h2{font-size:var(--text-2xl)}:is(.use-lustre-ui .prose,.lustre-ui-prose) h3{font-size:var(--text-xl)}:is(.use-lustre-ui .prose,.lustre-ui-prose) :is(h4,h5,h6){font-size:var(--text-lg)}:is(.use-lustre-ui .prose,.lustre-ui-prose) img{border-radius:var(--border-radius);display:block;height:auto;-o-object-fit:cover;object-fit:cover;width:100%}:is(.use-lustre-ui .prose,.lustre-ui-prose) ul{list-style:disc}:is(.use-lustre-ui .prose,.lustre-ui-prose) ol{list-style:decimal}:is(.use-lustre-ui .prose,.lustre-ui-prose) :is(ul,ol,dl){padding-left:var(--space-xl)}:is(:is(.use-lustre-ui .prose,.lustre-ui-prose) :is(ul,ol,dl))>*+*{margin-top:var(--space-md)}:is(.use-lustre-ui .prose,.lustre-ui-prose) li::marker{color:var(--text-low-contrast)}:is(.use-lustre-ui .prose,.lustre-ui-prose) pre{background-color:var(--greyscale-element-background);border-radius:var(--border-radius);overflow-x:auto;padding:var(--space-sm) var(--space-md)}:is(.use-lustre-ui .prose,.lustre-ui-prose) pre>code{background-color:transparent;border-radius:0;color:inherit;font-size:var(--text-md);padding:0}:is(.use-lustre-ui .prose,.lustre-ui-prose) blockquote{border-left:4px solid var(--element-border-subtle);padding-left:var(--space-xl);quotes:"\\201C""\\201D""\\2018""\\2019"}:is(.use-lustre-ui .prose,.lustre-ui-prose) blockquote>*{font-style:italic}:is(:is(.use-lustre-ui .prose,.lustre-ui-prose) blockquote)>*+*{margin-top:var(--space-sm)}:is(.use-lustre-ui .prose,.lustre-ui-prose) blockquote>:first-child:before{content:open-quote}:is(.use-lustre-ui .prose,.lustre-ui-prose) blockquote>:last-child:after{content:close-quote}:is(.use-lustre-ui .prose,.lustre-ui-prose) a[href]{color:var(--text-low-contrast);text-decoration:underline}:is(.use-lustre-ui .prose,.lustre-ui-prose) a[href]:visited{color:var(--text-high-contrast)}:is(.use-lustre-ui .prose,.lustre-ui-prose) :is(code,kbd){background-color:var(--greyscale-element-background);border-radius:var(--border-radius)}:is(.use-lustre-ui .prose,.lustre-ui-prose) :not(pre) code{color:var(--text-high-contrast)}:is(.use-lustre-ui .prose,.lustre-ui-prose) :not(pre) code:after,:is(.use-lustre-ui .prose,.lustre-ui-prose) :not(pre) code:before{content:"\\`"}:is(.use-lustre-ui .prose,.lustre-ui-prose) kbd{border-color:var(--greyscale-element-border-strong);border-width:1px;font-weight:700;padding:0 var(--space-2xs)}.lustre-ui-sequence,.use-lustre-ui .sequence{--gap:var(--space-md);--break:30rem;display:flex;flex-wrap:wrap;gap:var(--gap)}.packed:is(.use-lustre-ui .sequence,.lustre-ui-sequence){--gap:0}.tight:is(.use-lustre-ui .sequence,.lustre-ui-sequence){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .sequence,.lustre-ui-sequence){--gap:var(--space-md)}.loose:is(.use-lustre-ui .sequence,.lustre-ui-sequence){--gap:var(--space-lg)}[data-split-at="3"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+3),[data-split-at="3"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+3)~*{flex-basis:100%}[data-split-at="4"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+4),[data-split-at="4"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+4)~*{flex-basis:100%}[data-split-at="5"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+5),[data-split-at="5"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+5)~*{flex-basis:100%}[data-split-at="6"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+6),[data-split-at="6"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+6)~*{flex-basis:100%}[data-split-at="7"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+7),[data-split-at="7"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+7)~*{flex-basis:100%}[data-split-at="8"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+8),[data-split-at="8"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+8)~*{flex-basis:100%}[data-split-at="9"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+9),[data-split-at="9"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+9)~*{flex-basis:100%}[data-split-at="10"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+10),[data-split-at="10"]:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>:nth-last-child(n+10)~*{flex-basis:100%}:is(.use-lustre-ui .sequence,.lustre-ui-sequence)>*{flex-basis:calc((var(--break) - 100%)*999);flex-grow:1}.lustre-ui-stack,.use-lustre-ui .stack{--gap:var(--space-md);display:flex;flex-direction:column;gap:var(--gap);justify-content:flex-start}.packed:is(.use-lustre-ui .stack,.lustre-ui-stack){--gap:0}.tight:is(.use-lustre-ui .stack,.lustre-ui-stack){--gap:var(--space-xs)}.relaxed:is(.use-lustre-ui .stack,.lustre-ui-stack){--gap:var(--space-md)}.loose:is(.use-lustre-ui .stack,.lustre-ui-stack){--gap:var(--space-lg)}.lustre-ui-tag,.use-lustre-ui .tag{--bg-active:var(--element-background-strong);--bg-hover:var(--element-background-hover);--bg:var(--element-background);--border-active:var(--bg-active);--border:var(--bg);--text:var(--text-high-contrast);background-color:var(--bg);border:1px solid var(--border,var(--bg),var(--element-border-subtle));border-radius:var(--border-radius);color:var(--text);font-size:var(--text-sm);padding:0 var(--space-xs)}:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]){cursor:pointer;-webkit-user-select:none;-moz-user-select:none;user-select:none}:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):focus-within,:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):hover{background-color:var(--bg-hover)}:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):focus-within:active,:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):hover:active{background-color:var(--bg-active);border-color:var(--border-active)}.solid:is(.use-lustre-ui .tag,.lustre-ui-tag){--bg-active:var(--solid-background-hover);--bg-hover:var(--solid-background-hover);--bg:var(--solid-background);--border-active:var(--solid-background-hover);--border:var(--solid-background);--text:#fff}.solid:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):focus-within:active,.solid:is(.use-lustre-ui .tag,.lustre-ui-tag):is(button,a,[tabindex]):hover:active{--bg-active:color-mix(in srgb,var(--solid-background-hover) 90%,#000);--border-active:color-mix(in srgb,var(--solid-background-hover) 90%,#000)}.soft:is(.use-lustre-ui .tag,.lustre-ui-tag){--bg-active:var(--element-background-strong);--bg-hover:var(--element-background-hover);--bg:var(--element-background);--border-active:var(--bg-active);--border:var(--bg);--text:var(--text-high-contrast)}.outline:is(.use-lustre-ui .tag,.lustre-ui-tag){--bg:unset;--border:var(--element-border-subtle)}\n';
+function elements2() {
+  return style2(toList([]), element_css);
 }
 
 // build/dev/javascript/modem/modem.ffi.mjs
@@ -1965,10 +2686,11 @@ var initial_location = window?.location?.href;
 
 // build/dev/javascript/portfolio/portfolio.mjs
 var Model2 = class extends CustomType {
-  constructor(route, state) {
+  constructor(route, state, theme2) {
     super();
     this.route = route;
     this.state = state;
+    this.theme = theme2;
   }
 };
 var Index = class extends CustomType {
@@ -1978,34 +2700,76 @@ var State = class extends CustomType {
 var NoMessage = class extends CustomType {
 };
 function init2(_) {
-  return [new Model2(new Index(), new State()), none()];
+  let theme2 = new Theme(
+    purple(),
+    grey(),
+    red(),
+    yellow(),
+    green(),
+    blue()
+  );
+  return [new Model2(new Index(), new State(), theme2), none()];
 }
 function update(model, msg) {
   if (msg instanceof NoMessage) {
     return [model, none()];
   } else {
     let route = msg[0];
-    return [new Model2(route, model.state), none()];
+    return [new Model2(route, model.state, model.theme), none()];
   }
 }
-function view(model) {
+function index2(model) {
   return div(
-    toList([id("mainbody")]),
+    toList([]),
     toList([
-      div(
+      centre2(
+        toList([]),
+        p(
+          toList([text_4xl(), font_alt()]),
+          toList([text("Site under development")])
+        )
+      )
+    ])
+  );
+}
+function view(model) {
+  let custom_styles = style(
+    toList([
+      ["width", "full"],
+      ["margin", "0 auto"],
+      ["padding", "2rem"],
+      ["height", "100%"],
+      ["min-height", "100%"]
+    ])
+  );
+  let fullscreen = style(
+    toList([
+      ["position", "fixed"],
+      ["top", "0"],
+      ["left", "0"],
+      ["overflow", "auto"]
+    ])
+  );
+  return div(
+    toList([]),
+    toList([
+      stack2(
+        toList([id("container")]),
         toList([
-          id("textarea"),
-          style(
-            toList([["width", "full"], ["height", "full"], ["display", "flex"]])
-          )
-        ]),
-        toList([
-          prose2(
-            toList([]),
+          theme(model.theme),
+          elements2(),
+          div(
+            toList([fullscreen]),
             toList([
-              p(
-                toList([text_4xl()]),
-                toList([text("Site under development!")])
+              div(
+                toList([custom_styles]),
+                toList([
+                  (() => {
+                    {
+                      return index2(model);
+                    }
+                  })()
+                ])
               )
             ])
           )
@@ -2021,7 +2785,7 @@ function main() {
     throw makeError(
       "assignment_no_match",
       "portfolio",
-      15,
+      17,
       "main",
       "Assignment pattern did not match",
       { value: $ }

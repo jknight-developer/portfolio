@@ -64,12 +64,13 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 
 pub fn view(model: Model) -> Element(Msg) {
   let custom_styles = attribute.style([#("width", "full"), #("margin", "0 auto"), #("padding", "2rem"), #("height", "100%"), #("min-height", "100%")])
+  let fullscreen = attribute.style([#("position", "fixed"), #("top", "0"), #("left", "0"), #("right", "0"), #("bottom", "0"), #("overflow", "auto")])
 
   html.div([], [
     ui.stack([attribute.id("container")], [
       styles.theme(model.theme),
       styles.elements(),
-      html.div([], [
+      html.div([fullscreen], [
         html.div([custom_styles], [
           case model {
             Model(Index, _, _) -> index(model)
