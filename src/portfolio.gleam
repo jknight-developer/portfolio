@@ -63,17 +63,25 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 }
 
 pub fn view(model: Model) -> Element(Msg) {
-  html.div([attribute.id("mainbody"), attribute.style([#("width", "full"), #("height", "100%"), #("margin", "0 auto"), #("min-height", "100%")]),], [
+  let custom_styles = attribute.style([#("width", "full"), #("margin", "0 auto"), #("padding", "2rem"), #("height", "100%"), #("min-height", "100%")])
+
+  html.div([], [
     ui.stack([attribute.id("container")], [
       styles.theme(model.theme),
       styles.elements(),
-      ui.centre([], html.div([attribute.id("textarea"), attribute.style([#("display", "flex")]),], [
-        ui.prose([], [
-          html.p([classes.text_4xl(), classes.font_alt()], [ui.centre([], 
-            element.text("Site under development!"),
-          )])
+      html.div([], [
+        html.div([custom_styles], [
+          case model {
+            Model(Index, _, _) -> index(model)
+          },
         ]),
-      ])),
-    ])
+      ]),
+    ]),
+  ])
+}
+
+fn index(model: Model) -> Element(Msg) {
+  html.div([], [
+    ui.centre([], html.p([classes.text_4xl(), classes.font_alt()], [element.text("Site under development")])),
   ])
 }
