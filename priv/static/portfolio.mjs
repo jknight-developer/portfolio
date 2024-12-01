@@ -1354,9 +1354,6 @@ function style(properties) {
 function class$(name) {
   return attribute("class", name);
 }
-function id(name) {
-  return attribute("id", name);
-}
 
 // build/dev/javascript/lustre/lustre/element.mjs
 function element(tag2, attrs, children2) {
@@ -1510,9 +1507,9 @@ if (globalThis.customElements && !globalThis.customElements.get("lustre-fragment
 }
 function morph(prev, next, dispatch) {
   let out;
-  let stack3 = [{ prev, next, parent: prev.parentNode }];
-  while (stack3.length) {
-    let { prev: prev2, next: next2, parent } = stack3.pop();
+  let stack2 = [{ prev, next, parent: prev.parentNode }];
+  while (stack2.length) {
+    let { prev: prev2, next: next2, parent } = stack2.pop();
     while (next2.subtree !== void 0)
       next2 = next2.subtree();
     if (next2.content !== void 0) {
@@ -1534,7 +1531,7 @@ function morph(prev, next, dispatch) {
         prev: prev2,
         next: next2,
         dispatch,
-        stack: stack3
+        stack: stack2
       });
       if (!prev2) {
         parent.appendChild(created);
@@ -1546,7 +1543,7 @@ function morph(prev, next, dispatch) {
   }
   return out;
 }
-function createElementNode({ prev, next, dispatch, stack: stack3 }) {
+function createElementNode({ prev, next, dispatch, stack: stack2 }) {
   const namespace = next.namespace || "http://www.w3.org/1999/xhtml";
   const canMorph = prev && prev.nodeType === Node.ELEMENT_NODE && prev.localName === next.tag && prev.namespaceURI === (next.namespace || "http://www.w3.org/1999/xhtml");
   const el = canMorph ? prev : namespace ? document.createElementNS(namespace, next.tag) : document.createElement(next.tag);
@@ -1668,7 +1665,7 @@ function createElementNode({ prev, next, dispatch, stack: stack3 }) {
         prevChild,
         child,
         el,
-        stack3,
+        stack2,
         incomingKeyedChildren,
         keyedChildren,
         seenKeys
@@ -1676,7 +1673,7 @@ function createElementNode({ prev, next, dispatch, stack: stack3 }) {
     }
   } else {
     for (const child of children(next)) {
-      stack3.unshift({ prev: prevChild, next: child, parent: el });
+      stack2.unshift({ prev: prevChild, next: child, parent: el });
       prevChild = prevChild?.nextSibling;
     }
   }
@@ -1743,41 +1740,41 @@ function getKeyedChildren(el) {
   }
   return keyedChildren;
 }
-function diffKeyedChild(prevChild, child, el, stack3, incomingKeyedChildren, keyedChildren, seenKeys) {
+function diffKeyedChild(prevChild, child, el, stack2, incomingKeyedChildren, keyedChildren, seenKeys) {
   while (prevChild && !incomingKeyedChildren.has(prevChild.getAttribute("data-lustre-key"))) {
     const nextChild = prevChild.nextSibling;
     el.removeChild(prevChild);
     prevChild = nextChild;
   }
   if (keyedChildren.size === 0) {
-    stack3.unshift({ prev: prevChild, next: child, parent: el });
+    stack2.unshift({ prev: prevChild, next: child, parent: el });
     prevChild = prevChild?.nextSibling;
     return prevChild;
   }
   if (seenKeys.has(child.key)) {
     console.warn(`Duplicate key found in Lustre vnode: ${child.key}`);
-    stack3.unshift({ prev: null, next: child, parent: el });
+    stack2.unshift({ prev: null, next: child, parent: el });
     return prevChild;
   }
   seenKeys.add(child.key);
   const keyedChild = keyedChildren.get(child.key);
   if (!keyedChild && !prevChild) {
-    stack3.unshift({ prev: null, next: child, parent: el });
+    stack2.unshift({ prev: null, next: child, parent: el });
     return prevChild;
   }
   if (!keyedChild && prevChild !== null) {
     const placeholder = document.createTextNode("");
     el.insertBefore(placeholder, prevChild);
-    stack3.unshift({ prev: placeholder, next: child, parent: el });
+    stack2.unshift({ prev: placeholder, next: child, parent: el });
     return prevChild;
   }
   if (!keyedChild || keyedChild === prevChild) {
-    stack3.unshift({ prev: prevChild, next: child, parent: el });
+    stack2.unshift({ prev: prevChild, next: child, parent: el });
     prevChild = prevChild?.nextSibling;
     return prevChild;
   }
   el.insertBefore(keyedChild, prevChild);
-  stack3.unshift({ prev: keyedChild, next: child, parent: el });
+  stack2.unshift({ prev: keyedChild, next: child, parent: el });
   return prevChild;
 }
 function* children(element2) {
@@ -2097,17 +2094,6 @@ function div(attrs, children2) {
 }
 function p(attrs, children2) {
   return element("p", attrs, children2);
-}
-
-// build/dev/javascript/lustre_ui/lustre/ui/centre.mjs
-function of(element2, attributes, children2) {
-  return element2(
-    prepend(class$("lustre-ui-centre"), attributes),
-    toList([children2])
-  );
-}
-function centre(attributes, children2) {
-  return of(div, attributes, children2);
 }
 
 // build/dev/javascript/gleam_community_colour/gleam_community/colour.mjs
@@ -2567,17 +2553,6 @@ function green() {
   );
 }
 
-// build/dev/javascript/lustre_ui/lustre/ui/stack.mjs
-function of2(element2, attributes, children2) {
-  return element2(
-    prepend(class$("lustre-ui-stack"), attributes),
-    children2
-  );
-}
-function stack(attributes, children2) {
-  return of2(div, attributes, children2);
-}
-
 // build/dev/javascript/lustre_ui/lustre/ui.mjs
 var Theme = class extends CustomType {
   constructor(primary, greyscale, error, warning, success, info) {
@@ -2590,10 +2565,11 @@ var Theme = class extends CustomType {
     this.info = info;
   }
 };
-var centre2 = centre;
-var stack2 = stack;
 
 // build/dev/javascript/lustre_ui/lustre/ui/classes.mjs
+function text_2xl() {
+  return class$("text-2xl");
+}
 function text_4xl() {
   return class$("text-4xl");
 }
@@ -2718,63 +2694,69 @@ function update(model, msg) {
     return [new Model2(route, model.state, model.theme), none()];
   }
 }
-function index2(model) {
-  return div(
-    toList([]),
+function index2(_) {
+  let flex_container = style(
     toList([
-      centre2(
-        toList([]),
-        p(
-          toList([text_4xl(), font_alt()]),
-          toList([text("Site under development")])
-        )
-      )
-    ])
-  );
-}
-function view(model) {
-  let custom_styles = style(
-    toList([
-      ["width", "full"],
-      ["margin", "0 auto"],
-      ["padding", "2rem"],
       ["height", "100%"],
-      ["min-height", "100%"]
+      ["padding", "0"],
+      ["margin", "0"],
+      ["display", "flex"],
+      ["align-items", "center"],
+      ["justify-content", "center"]
     ])
   );
-  let fullscreen = style(
+  let flex_item = style(
     toList([
-      ["position", "fixed"],
-      ["top", "0"],
-      ["left", "0"],
-      ["overflow", "auto"]
+      ["padding", "2rem"],
+      ["width", "100%"],
+      ["margin", "4rem"],
+      ["text-align", "center"]
     ])
   );
   return div(
-    toList([]),
+    toList([flex_container]),
     toList([
-      stack2(
-        toList([id("container")]),
+      div(
+        toList([flex_item, text_4xl(), font_alt()]),
         toList([
-          theme(model.theme),
-          elements2(),
-          div(
-            toList([fullscreen]),
+          p(toList([]), toList([text("Site under development")]))
+        ])
+      ),
+      div(
+        toList([flex_item, text_2xl(), font_alt()]),
+        toList([
+          p(
+            toList([]),
             toList([
-              div(
-                toList([custom_styles]),
-                toList([
-                  (() => {
-                    {
-                      return index2(model);
-                    }
-                  })()
-                ])
+              text(
+                "To contact me, send an email to jonathan@jknightdev.co.uk"
               )
             ])
           )
         ])
       )
+    ])
+  );
+}
+function view(model) {
+  return div(
+    toList([
+      style(
+        toList([
+          ["background", "#efe998"],
+          ["height", "100%"],
+          ["min-height", "100%"]
+        ])
+      )
+    ]),
+    toList([
+      theme(model.theme),
+      elements2(),
+      (() => {
+        {
+          return index2(model);
+        }
+      })()
     ])
   );
 }

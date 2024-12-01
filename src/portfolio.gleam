@@ -63,26 +63,20 @@ pub fn update(model: Model, msg: Msg) -> #(Model, Effect(Msg)) {
 }
 
 pub fn view(model: Model) -> Element(Msg) {
-  let custom_styles = attribute.style([#("width", "full"), #("margin", "0 auto"), #("padding", "2rem"), #("height", "100%"), #("min-height", "100%")])
-  let fullscreen = attribute.style([#("position", "fixed"), #("top", "0"), #("left", "0"), #("right", "0"), #("bottom", "0"), #("overflow", "auto")])
-
-  html.div([], [
-    ui.stack([attribute.id("container")], [
-      styles.theme(model.theme),
-      styles.elements(),
-      html.div([fullscreen], [
-        html.div([custom_styles], [
-          case model {
-            Model(Index, _, _) -> index(model)
-          },
-        ]),
-      ]),
-    ]),
+  html.div([attribute.style([#("background", "#efe998"), #("height", "100%"), #("min-height", "100%")])], [
+    styles.theme(model.theme),
+    styles.elements(),
+    case model {
+      Model(Index, _, _) -> index(model)
+    },
   ])
 }
 
-fn index(model: Model) -> Element(Msg) {
-  html.div([], [
-    ui.centre([], html.p([classes.text_4xl(), classes.font_alt()], [element.text("Site under development")])),
+fn index(_model: Model) -> Element(Msg) {
+  let flex_container = attribute.style([#("height", "100%"), #("padding", "0"), #("margin", "0"), #("display", "flex"), #("align-items", "center"), #("justify-content", "center")])
+  let flex_item = attribute.style([#("padding", "2rem"), #("width", "100%"), #("margin", "4rem"), #("text-align", "center")])
+  html.div([flex_container], [
+    html.div([flex_item, classes.text_4xl(), classes.font_alt()], [html.p([], [element.text("Site under development")])]),
+    html.div([flex_item, classes.text_2xl(), classes.font_alt()], [html.p([], [element.text("To contact me, send an email to jonathan@jknightdev.co.uk")])]),
   ])
 }
