@@ -41,7 +41,10 @@ fn init(_flags) -> #(Model, Effect(Msg)) {
     success: colour.green(),
     info: colour.blue(),
   )
-  #(Model(route: Index, state: State, theme: theme), effect.none())
+  #(
+    Model(route: Index, state: State, theme: theme), 
+    effect.batch([modem.init(on_url_change)])
+  )
 }
 
 fn on_url_change(uri: Uri) -> Msg {
@@ -67,9 +70,9 @@ pub fn view(model: Model) -> Element(Msg) {
   html.div([attribute.style([#("background", "#efe998"), #("height", "100%"), #("min-height", "100%")])], [
     styles.theme(model.theme),
     styles.elements(),
-    case model {
-      Model(Index, _, _) -> index(model)
-      Model(NotFound, _, _) -> not_found(model)
+    case model.route {
+      Index -> index(model)
+      NotFound -> not_found(model)
     },
   ])
 }
