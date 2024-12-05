@@ -2739,6 +2739,9 @@ function index2(_) {
     ])
   );
 }
+function not_found(_) {
+  return text("404 not found");
+}
 function view(model) {
   return div(
     toList([
@@ -2754,8 +2757,10 @@ function view(model) {
       theme(model.theme),
       elements2(),
       (() => {
-        {
+        if (model instanceof Model2 && model.route instanceof Index) {
           return index2(model);
+        } else {
+          return not_found(model);
         }
       })()
     ])

@@ -24,6 +24,7 @@ pub type Model {
 }
 
 pub type Route {
+  NotFound
   Index
 }
 
@@ -46,7 +47,7 @@ fn init(_flags) -> #(Model, Effect(Msg)) {
 fn on_url_change(uri: Uri) -> Msg {
   case uri.path_segments(uri.path) {
     ["index"] -> OnRouteChange(Index)
-    _ -> OnRouteChange(Index)
+    _ -> OnRouteChange(NotFound)
   }
 }
 
@@ -68,6 +69,7 @@ pub fn view(model: Model) -> Element(Msg) {
     styles.elements(),
     case model {
       Model(Index, _, _) -> index(model)
+      Model(NotFound, _, _) -> not_found(model)
     },
   ])
 }
@@ -79,4 +81,8 @@ fn index(_model: Model) -> Element(Msg) {
     html.div([flex_item, classes.text_4xl(), classes.font_alt()], [html.p([], [element.text("Site under development")])]),
     html.div([flex_item, classes.text_2xl(), classes.font_alt()], [html.p([], [element.text("To contact me, send an email to jonathan@jknightdev.co.uk")])]),
   ])
+}
+
+fn not_found(_model: Model) -> Element(Msg) {
+  element.text("404 not found")
 }
